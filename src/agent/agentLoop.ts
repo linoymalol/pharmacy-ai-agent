@@ -46,6 +46,10 @@ export async function* runAgentLoop(
       content: systemPrompt,
     },
     {
+      role: "system",
+      content: `The customer's preferred language is ${locale}. Respond in ${locale}.`,
+    },
+    {
       role: "user",
       content: input,
     },
@@ -122,7 +126,28 @@ export async function* runAgentLoop(
       if (toolCalls.length > 0) {
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function.name;
-          const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+          let toolArgs: unknown = {};
+          try {
+            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+          } catch (error) {
+            const errorResult = {
+              success: false,
+              error: `Invalid tool arguments for '${toolName}': ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`,
+            };
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(errorResult),
+            });
+            yield {
+              type: "tool_result",
+              name: toolName,
+              result: errorResult,
+            };
+            continue;
+          }
 
           yield {
             type: "tool_call",
