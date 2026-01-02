@@ -87,8 +87,8 @@ export async function* runAgentLoop(
       const getOrCreateToolCall = (id: string, name?: string) => {
         const existing = toolCallsById.get(id);
         if (existing) {
-          if (name && !existing.function.name) {
-            existing.function.name = name;
+          if (name && !existing.name) {
+            existing.name = name;
           }
           return existing;
         }
