@@ -101,6 +101,17 @@ const prescriptions: PrescriptionRecord[] = [
   },
 ];
 
+type MedicationSeedRow = Omit<MedicationRecord, "requiresPrescription"> & {
+  requiresPrescription: number;
+};
+
+function toMedicationSeedRow(medication: MedicationRecord): MedicationSeedRow {
+  return {
+    ...medication,
+    requiresPrescription: medication.requiresPrescription ? 1 : 0,
+  };
+}
+
 export function seedDatabase(db: DatabaseType): void {
   const insertUser = db.prepare(
     "INSERT OR IGNORE INTO users (id, name, language, email) VALUES (@id, @name, @language, @email)"
@@ -114,7 +125,9 @@ export function seedDatabase(db: DatabaseType): void {
 
   const seedTransaction = db.transaction(() => {
     users.forEach((user) => insertUser.run(user));
-    medications.forEach((medication) => insertMedication.run(medication));
+    medications
+      .map(toMedicationSeedRow)
+      .forEach((medication) => insertMedication.run(medication));
     prescriptions.forEach((prescription) => insertPrescription.run(prescription));
   });
 
