@@ -1,3 +1,9 @@
+import Database from "better-sqlite3";
+import { existsSync, mkdirSync, readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import { seedDatabase } from "./seed.js";
+
 export type MedicationRecord = {
   id: string;
   name: string;
@@ -25,118 +31,82 @@ export type PrescriptionRecord = {
   doctorName: string;
 };
 
-export const syntheticDb = {
-  users: [
-    { id: "user1", name: "David Cohen", language: "he", email: "david.cohen@example.com" },
-    { id: "user2", name: "Sarah Levy", language: "he", email: "sarah.levy@example.com" },
-    { id: "user3", name: "Michael Ben-David", language: "he", email: "michael.bd@example.com" },
-    { id: "user4", name: "Rachel Mizrahi", language: "he", email: "rachel.m@example.com" },
-    { id: "user5", name: "John Smith", language: "en", email: "john.smith@example.com" },
-    { id: "user6", name: "Emily Johnson", language: "en", email: "emily.j@example.com" },
-    { id: "user7", name: "Daniel Brown", language: "en", email: "daniel.b@example.com" },
-    { id: "user8", name: "Lisa Anderson", language: "en", email: "lisa.a@example.com" },
-    { id: "user9", name: "Tom Wilson", language: "en", email: "tom.w@example.com" },
-    { id: "user10", name: "Anna Martinez", language: "en", email: "anna.m@example.com" },
-  ] as UserRecord[],
-  medications: [
-    {
-      id: "med1",
-      name: "Aspirin",
-      activeIngredient: "Acetylsalicylic acid",
-      requiresPrescription: false,
-      stock: 150,
-      dosage: "100mg, 325mg tablets",
-      usageInstructions: "Take with food or water. Do not exceed recommended dosage.",
-    },
-    {
-      id: "med2",
-      name: "Amoxicillin",
-      activeIngredient: "Amoxicillin trihydrate",
-      requiresPrescription: true,
-      stock: 45,
-      dosage: "250mg, 500mg capsules",
-      usageInstructions: "Take as directed by your doctor, typically 2-3 times daily with or without food.",
-    },
-    {
-      id: "med3",
-      name: "Ibuprofen",
-      activeIngredient: "Ibuprofen",
-      requiresPrescription: false,
-      stock: 200,
-      dosage: "200mg, 400mg, 600mg tablets",
-      usageInstructions: "Take with food or milk to reduce stomach upset. Do not exceed 3200mg per day.",
-    },
-    {
-      id: "med4",
-      name: "Atorvastatin",
-      activeIngredient: "Atorvastatin calcium",
-      requiresPrescription: true,
-      stock: 30,
-      dosage: "10mg, 20mg, 40mg, 80mg tablets",
-      usageInstructions: "Take once daily, with or without food, as prescribed by your doctor.",
-    },
-    {
-      id: "med5",
-      name: "Metformin",
-      activeIngredient: "Metformin hydrochloride",
-      requiresPrescription: true,
-      stock: 25,
-      dosage: "500mg, 850mg, 1000mg tablets",
-      usageInstructions: "Take with meals to reduce stomach upset. Follow your doctor's instructions carefully.",
-    },
-  ] as MedicationRecord[],
-  prescriptions: [
-    {
-      id: "presc1",
-      userId: "user1",
-      medicationId: "med4",
-      prescribedDate: "2024-01-15",
-      quantity: 30,
-      refillsRemaining: 2,
-      doctorName: "Dr. Avraham Goldstein",
-    },
-    {
-      id: "presc2",
-      userId: "user2",
-      medicationId: "med5",
-      prescribedDate: "2024-01-20",
-      quantity: 60,
-      refillsRemaining: 1,
-      doctorName: "Dr. Miriam Cohen",
-    },
-    {
-      id: "presc3",
-      userId: "user5",
-      medicationId: "med2",
-      prescribedDate: "2024-02-01",
-      quantity: 21,
-      refillsRemaining: 0,
-      doctorName: "Dr. Robert Miller",
-    },
-  ] as PrescriptionRecord[],
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, "..", "..");
+const dataDir = join(projectRoot, "data");
+const dbPath = join(dataDir, "pharmacy.db");
+const schemaPath = join(projectRoot, "schema.sql");
+
+function ensureDatabase(): Database {
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
+  }
+
+  const db = new Database(dbPath);
+  db.pragma("foreign_keys = ON");
+
+  const schema = readFileSync(schemaPath, "utf-8");
+  db.exec(schema);
+  seedDatabase(db);
+
+  return db;
+}
+
+const db = ensureDatabase();
+
+function mapMedication(row: MedicationRecord | null): MedicationRecord | null {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    requiresPrescription: Boolean(row.requiresPrescription),
+  };
+}
 
 export function getMedicationByName(name: string): MedicationRecord | null {
   const normalizedName = name.toLowerCase().trim();
-  return (
-    syntheticDb.medications.find(
-      (med) => med.name.toLowerCase() === normalizedName
-    ) || null
-  );
+  const row = db
+    .prepare<MedicationRecord>(
+      "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE LOWER(name) = ?"
+    )
+    .get(normalizedName);
+  return mapMedication(row ?? null);
 }
 
 export function getMedicationById(id: string): MedicationRecord | null {
-  return syntheticDb.medications.find((med) => med.id === id) || null;
+  const row = db
+    .prepare<MedicationRecord>(
+      "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE id = ?"
+    )
+    .get(id);
+  return mapMedication(row ?? null);
 }
 
 export function getUserById(id: string): UserRecord | null {
-  return syntheticDb.users.find((user) => user.id === id) || null;
+  const row = db
+    .prepare<UserRecord>(
+      "SELECT id, name, language, email FROM users WHERE id = ?"
+    )
+    .get(id);
+  return row ?? null;
 }
 
 export function getUserPrescriptions(userId: string): PrescriptionRecord[] {
-  return syntheticDb.prescriptions.filter((presc) => presc.userId === userId);
+  return db
+    .prepare<PrescriptionRecord>(
+      "SELECT id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName FROM prescriptions WHERE userId = ?"
+    )
+    .all(userId);
 }
 
 export function getPrescriptionById(id: string): PrescriptionRecord | null {
-  return syntheticDb.prescriptions.find((presc) => presc.id === id) || null;
+  const row = db
+    .prepare<PrescriptionRecord>(
+      "SELECT id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName FROM prescriptions WHERE id = ?"
+    )
+    .get(id);
+  return row ?? null;
 }
