@@ -164,6 +164,19 @@ export async function* runAgentLoop(
           continue;
         }
 
+        if (event.type === "response.output_item.done" && event.item) {
+          const item = event.item;
+          if (item.type === "function_call") {
+            const id = item.call_id ?? item.id ?? "";
+            const toolCall = getOrCreateToolCall(id, item.name);
+            if (toolCall) {
+              toolCall.name = item.name ?? toolCall.name;
+              toolCall.arguments = item.arguments ?? toolCall.arguments;
+            }
+          }
+          continue;
+        }
+
         if (event.type === "response.function_call_arguments.delta") {
           const id = event.call_id ?? event.item_id ?? "";
           if (!id) continue;
@@ -172,6 +185,17 @@ export async function* runAgentLoop(
             continue;
           }
           toolCall.arguments += event.delta ?? "";
+          continue;
+        }
+
+        if (event.type === "response.function_call_arguments.done") {
+          const id = event.call_id ?? event.item_id ?? "";
+          if (!id) continue;
+          const toolCall = getOrCreateToolCall(id, event.name);
+          if (!toolCall) {
+            continue;
+          }
+          toolCall.arguments = event.item?.arguments ?? toolCall.arguments;
           continue;
         }
 
