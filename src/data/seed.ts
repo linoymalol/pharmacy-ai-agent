@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Database as DatabaseType } from "better-sqlite3";
 import type {
   MedicationRecord,
   PrescriptionRecord,
@@ -101,7 +101,7 @@ const prescriptions: PrescriptionRecord[] = [
   },
 ];
 
-export function seedDatabase(db: Database): void {
+export function seedDatabase(db: DatabaseType): void {
   const insertUser = db.prepare(
     "INSERT OR IGNORE INTO users (id, name, language, email) VALUES (@id, @name, @language, @email)"
   );

@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import type { Database as DatabaseType } from "better-sqlite3";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -38,7 +39,7 @@ const dataDir = join(projectRoot, "data");
 const dbPath = join(dataDir, "pharmacy.db");
 const schemaPath = join(projectRoot, "schema.sql");
 
-function ensureDatabase(): Database {
+function ensureDatabase(): DatabaseType {
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true });
   }
