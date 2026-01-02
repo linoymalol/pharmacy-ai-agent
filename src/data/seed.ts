@@ -1,9 +1,31 @@
 import type { Database as DatabaseType } from "better-sqlite3";
-import type {
-  MedicationRecord,
-  PrescriptionRecord,
-  UserRecord,
-} from "./syntheticDb.js";
+
+type UserRecord = {
+  id: string;
+  name: string;
+  language: "en" | "he";
+  email?: string;
+};
+
+type MedicationRecord = {
+  id: string;
+  name: string;
+  activeIngredient: string;
+  requiresPrescription: boolean;
+  stock: number;
+  dosage?: string;
+  usageInstructions?: string;
+};
+
+type PrescriptionRecord = {
+  id: string;
+  userId: string;
+  medicationId: string;
+  prescribedDate: string;
+  quantity: number;
+  refillsRemaining: number;
+  doctorName: string;
+};
 
 const users: UserRecord[] = [
   { id: "user1", name: "David Cohen", language: "he", email: "david.cohen@example.com" },
