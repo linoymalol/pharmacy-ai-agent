@@ -2,16 +2,16 @@ import type { Database as DatabaseType } from "better-sqlite3";
 import type { UserRecord, MedicationRecord, PrescriptionRecord } from "./types.js";
 
 const users: UserRecord[] = [
-  { id: "user1", name: "David Cohen", language: "he", email: "david.cohen@example.com" },
-  { id: "user2", name: "Sarah Levy", language: "he", email: "sarah.levy@example.com" },
-  { id: "user3", name: "Michael Ben-David", language: "he", email: "michael.bd@example.com" },
-  { id: "user4", name: "Rachel Mizrahi", language: "he", email: "rachel.m@example.com" },
-  { id: "user5", name: "John Smith", language: "en", email: "john.smith@example.com" },
-  { id: "user6", name: "Emily Johnson", language: "en", email: "emily.j@example.com" },
-  { id: "user7", name: "Daniel Brown", language: "en", email: "daniel.b@example.com" },
-  { id: "user8", name: "Lisa Anderson", language: "en", email: "lisa.a@example.com" },
-  { id: "user9", name: "Tom Wilson", language: "en", email: "tom.w@example.com" },
-  { id: "user10", name: "Anna Martinez", language: "en", email: "anna.m@example.com" },
+  { id: "user1", name: "David Cohen" },
+  { id: "user2", name: "Sarah Levy"},
+  { id: "user3", name: "Michael Ben-David" },
+  { id: "user4", name: "Rachel Mizrahi" },
+  { id: "user5", name: "John Smith" },
+  { id: "user6", name: "Emily Johnson"},
+  { id: "user7", name: "Daniel Brown" },
+  { id: "user8", name: "Lisa Anderson" },
+  { id: "user9", name: "Tom Wilson" },
+  { id: "user10", name: "Anna Martinez" },
 ];
 
 const medications: MedicationRecord[] = [
@@ -110,7 +110,7 @@ function toMedicationSeedRow(medication: MedicationRecord): MedicationSeedRow {
 
 export function seedDatabase(db: DatabaseType): void {
   const insertUser = db.prepare(
-    "INSERT OR IGNORE INTO users (id, name, language, email) VALUES (@id, @name, @language, @email)"
+    "INSERT OR IGNORE INTO users (id, name) VALUES (@id, @name)"
   );
   const insertMedication = db.prepare(
     "INSERT OR IGNORE INTO medications (id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions) VALUES (@id, @name, @activeIngredient, @requiresPrescription, @stock, @dosage, @usageInstructions)"
