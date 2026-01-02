@@ -16,11 +16,20 @@ type ResponseTool = {
   parameters: Record<string, unknown>;
 };
 
+type ToolCall = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
 type ResponseInputMessage = {
-  role: string;
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
   tool_call_id?: string;
-  tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+  tool_calls?: ToolCall[];
 };
 
 function convertToolsToOpenAIFormat(tools: ToolDefinition[]): ResponseTool[] {
@@ -32,24 +41,13 @@ function convertToolsToOpenAIFormat(tools: ToolDefinition[]): ResponseTool[] {
   }));
 }
 
-function convertMessagesToResponsesInput(
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
-): ResponseInputMessage[] {
+function convertMessagesToResponsesInput(messages: ResponseInputMessage[]): ResponseInputMessage[] {
   return messages.map((message) => {
-    if (typeof message.content !== "string") {
-      return {
-        role: message.role,
-        content: JSON.stringify(message.content ?? ""),
-        tool_call_id: "tool_call_id" in message ? message.tool_call_id : undefined,
-        tool_calls: "tool_calls" in message ? message.tool_calls : undefined,
-      };
-    }
-
     return {
       role: message.role,
       content: message.content,
-      tool_call_id: "tool_call_id" in message ? message.tool_call_id : undefined,
-      tool_calls: "tool_calls" in message ? message.tool_calls : undefined,
+      tool_call_id: message.tool_call_id,
+      tool_calls: message.tool_calls,
     };
   });
 }
@@ -74,7 +72,7 @@ export async function* runAgentLoop(
   });
 
   const openaiTools = convertToolsToOpenAIFormat(tools);
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+  const messages: ResponseInputMessage[] = [
     {
       role: "system",
       content: systemPrompt,
@@ -114,11 +112,11 @@ export async function* runAgentLoop(
         throw error;
       });
 
-      let assistantMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
+      let assistantMessage: ResponseInputMessage = {
         role: "assistant",
         content: "",
       };
-      const toolCallsById = new Map<string, OpenAI.Chat.Completions.ChatCompletionMessageToolCall>();
+      const toolCallsById = new Map<string, ToolCall>();
 
       const getOrCreateToolCall = (id: string, name?: string) => {
         const existing = toolCallsById.get(id);
@@ -128,7 +126,7 @@ export async function* runAgentLoop(
           }
           return existing;
         }
-        const toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall = {
+        const toolCall: ToolCall = {
           id,
           type: "function",
           function: {
