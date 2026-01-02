@@ -70,7 +70,7 @@ export async function* runAgentLoop(
 
     try {
       const stream = await openai.responses.create({
-        model: "gpt-4o", // Using GPT-4o as GPT-5 is not available
+        model: process.env.OPENAI_MODEL ?? "gpt-4o",
         input: messages,
         tools: openaiTools.length > 0 ? openaiTools : undefined,
         tool_choice: openaiTools.length > 0 ? "auto" : undefined,
