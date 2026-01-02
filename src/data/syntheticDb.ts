@@ -15,6 +15,10 @@ export type MedicationRecord = {
   usageInstructions?: string;
 };
 
+type MedicationRow = Omit<MedicationRecord, "requiresPrescription"> & {
+  requiresPrescription: number;
+};
+
 export type UserRecord = {
   id: string;
   name: string;
@@ -56,7 +60,7 @@ function ensureDatabase(): DatabaseType {
 
 const db = ensureDatabase();
 
-function mapMedication(row: MedicationRecord | null): MedicationRecord | null {
+function mapMedication(row: MedicationRow | null): MedicationRecord | null {
   if (!row) {
     return null;
   }
@@ -70,19 +74,19 @@ function mapMedication(row: MedicationRecord | null): MedicationRecord | null {
 export function getMedicationByName(name: string): MedicationRecord | null {
   const normalizedName = name.toLowerCase().trim();
   const row = db
-    .prepare<MedicationRecord>(
+    .prepare<MedicationRow>(
       "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE LOWER(name) = ?"
     )
-    .get(normalizedName);
+    .get(normalizedName) as MedicationRow | undefined;
   return mapMedication(row ?? null);
 }
 
 export function getMedicationById(id: string): MedicationRecord | null {
   const row = db
-    .prepare<MedicationRecord>(
+    .prepare<MedicationRow>(
       "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE id = ?"
     )
-    .get(id);
+    .get(id) as MedicationRow | undefined;
   return mapMedication(row ?? null);
 }
 
@@ -91,7 +95,7 @@ export function getUserById(id: string): UserRecord | null {
     .prepare<UserRecord>(
       "SELECT id, name, language, email FROM users WHERE id = ?"
     )
-    .get(id);
+    .get(id) as UserRecord | undefined;
   return row ?? null;
 }
 
@@ -100,7 +104,7 @@ export function getUserPrescriptions(userId: string): PrescriptionRecord[] {
     .prepare<PrescriptionRecord>(
       "SELECT id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName FROM prescriptions WHERE userId = ?"
     )
-    .all(userId);
+    .all(userId) as PrescriptionRecord[];
 }
 
 export function getPrescriptionById(id: string): PrescriptionRecord | null {
@@ -108,6 +112,6 @@ export function getPrescriptionById(id: string): PrescriptionRecord | null {
     .prepare<PrescriptionRecord>(
       "SELECT id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName FROM prescriptions WHERE id = ?"
     )
-    .get(id);
+    .get(id) as PrescriptionRecord | undefined;
   return row ?? null;
 }
