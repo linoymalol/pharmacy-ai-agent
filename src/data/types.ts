@@ -1,7 +1,9 @@
+import type { Locale } from "../config/locale.js";
+
 export type UserRecord = {
     id: string;
     name: string;
-    language: "en" | "he";
+    language: Locale;
     email?: string;
   };
   
