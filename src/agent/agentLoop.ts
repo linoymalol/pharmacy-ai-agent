@@ -24,7 +24,7 @@ export async function* runAgentLoop(
   request: AgentRequest,
   options: AgentLoopOptions
 ): AsyncGenerator<AgentResponseChunk> {
-  const { input, locale } = request;
+  const { input, locale, history = [] } = request;
   const { tools, handlers, apiKey } = options;
 
   if (!apiKey) {
@@ -49,11 +49,17 @@ export async function* runAgentLoop(
       role: "system",
       content: `The customer's preferred language is ${locale}. Respond in ${locale}.`,
     },
-    {
-      role: "user",
-      content: input,
-    },
   ];
+  for (const pastMessage of history) {
+    messages.push({
+      role: pastMessage.role,
+      content: pastMessage.content,
+    });
+  }
+  messages.push({
+    role: "user",
+    content: input,
+  });
 
   let maxIterations = 10; // Prevent infinite loops
   let iteration = 0;

@@ -364,6 +364,8 @@
         let currentMessageDiv = null;
         let currentToolCallDiv = null;
         let currentToolResultDiv = null;
+        let currentAssistantContent = '';
+        const conversationHistory = [];
 
         // Toggle tool calls visibility
         showToolCallsCheckbox.addEventListener('change', (e) => {
@@ -475,8 +477,11 @@
 
             const locale = languageSelect.value;
 
+            const payloadHistory = conversationHistory.slice();
+
             // Add user message
             addMessage(message, 'user');
+            conversationHistory.push({ role: 'user', content: message });
             messageInput.value = '';
             sendButton.disabled = true;
             sendButton.innerHTML = '<div class="loading"></div>';
@@ -485,6 +490,7 @@
             currentMessageDiv = null;
             currentToolCallDiv = null;
             currentToolResultDiv = null;
+            currentAssistantContent = '';
 
             try {
                 const response = await fetch('/api/chat', {
@@ -492,7 +498,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ input: message, locale }),
+                    body: JSON.stringify({ input: message, locale, history: payloadHistory }),
                 });
 
                 if (!response.ok) {
@@ -536,6 +542,7 @@
                                 
                                 if (parsed.type === 'message') {
                                     appendToMessage(parsed.content);
+                                    currentAssistantContent += parsed.content;
                                 } else if (parsed.type === 'tool_call') {
                                     addToolCall(parsed.name, parsed.arguments);
                                 } else if (parsed.type === 'tool_result') {
@@ -546,6 +553,9 @@
                             }
                         }
                     }
+                }
+                if (currentAssistantContent.trim()) {
+                    conversationHistory.push({ role: 'assistant', content: currentAssistantContent });
                 }
             } catch (error) {
                 addMessage(`Error: ${error.message}`, 'assistant');
