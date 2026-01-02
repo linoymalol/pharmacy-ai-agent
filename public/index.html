@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pharmacy AI Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .controls {
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .controls-left {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .toggle-tool-calls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .toggle-tool-calls:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .toggle-tool-calls input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .language-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message-content {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+        }
+
+        .tool-call {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .tool-call.hidden {
+            display: none;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .tool-call-header {
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tool-call-name {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .tool-result {
+            background: #d4edda;
+            border: 1px solid #28a745;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .tool-result.hidden {
+            display: none;
+        }
+
+        .tool-result-header {
+            font-weight: bold;
+            color: #155724;
+            margin-bottom: 8px;
+        }
+
+        .tool-json {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .input-container {
+            padding: 16px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 24px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .typing-indicator {
+            display: inline-block;
+            padding: 8px 12px;
+            background: #e0e0e0;
+            border-radius: 12px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .typing-dots {
+            display: inline-block;
+        }
+
+        .typing-dots span {
+            animation: typing 1.4s infinite;
+            opacity: 0;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                opacity: 0;
+            }
+            30% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💊 Pharmacy AI Agent</h1>
+            <p>Your intelligent pharmacy assistant - Ask about medications, stock, and prescriptions</p>
+        </div>
+        
+        <div class="controls">
+            <div class="controls-left">
+                <label for="language">Language:</label>
+                <select id="language" class="language-select">
+                    <option value="en">English</option>
+                    <option value="he">Hebrew (עברית)</option>
+                </select>
+            </div>
+            <label class="toggle-tool-calls" for="showToolCalls">
+                <input type="checkbox" id="showToolCalls" checked>
+                <span>🔧 Show Tool Calls</span>
+            </label>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="message-content">
+                    Hello! I'm your pharmacy assistant. How can I help you today?
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    class="input-field" 
+                    placeholder="Ask about medications, stock availability, or prescriptions..."
+                    autocomplete="off"
+                />
+                <button id="sendButton" class="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const languageSelect = document.getElementById('language');
+        const showToolCallsCheckbox = document.getElementById('showToolCalls');
+
+        let currentMessageDiv = null;
+        let currentToolCallDiv = null;
+        let currentToolResultDiv = null;
+
+        // Toggle tool calls visibility
+        showToolCallsCheckbox.addEventListener('change', (e) => {
+            const show = e.target.checked;
+            const toolCalls = document.querySelectorAll('.tool-call, .tool-result');
+            toolCalls.forEach(tool => {
+                if (show) {
+                    tool.classList.remove('hidden');
+                } else {
+                    tool.classList.add('hidden');
+                }
+            });
+        });
+
+        function addMessage(content, type = 'assistant') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(contentDiv);
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            return messageDiv;
+        }
+
+        function addToolCall(toolName, arguments_) {
+            const toolCallDiv = document.createElement('div');
+            toolCallDiv.className = 'tool-call';
+            
+            // Hide if toggle is off
+            if (!showToolCallsCheckbox.checked) {
+                toolCallDiv.classList.add('hidden');
+            }
+            
+            const header = document.createElement('div');
+            header.className = 'tool-call-header';
+            header.innerHTML = `🔧 Tool Call: <span class="tool-call-name">${toolName}</span>`;
+            
+            const jsonDiv = document.createElement('div');
+            jsonDiv.className = 'tool-json';
+            jsonDiv.textContent = JSON.stringify(arguments_, null, 2);
+            
+            toolCallDiv.appendChild(header);
+            toolCallDiv.appendChild(jsonDiv);
+            
+            if (currentMessageDiv) {
+                currentMessageDiv.appendChild(toolCallDiv);
+            } else {
+                chatContainer.appendChild(toolCallDiv);
+            }
+            
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            currentToolCallDiv = toolCallDiv;
+            
+            return toolCallDiv;
+        }
+
+        function addToolResult(toolName, result) {
+            const toolResultDiv = document.createElement('div');
+            toolResultDiv.className = 'tool-result';
+            
+            // Hide if toggle is off
+            if (!showToolCallsCheckbox.checked) {
+                toolResultDiv.classList.add('hidden');
+            }
+            
+            const header = document.createElement('div');
+            header.className = 'tool-result-header';
+            header.textContent = `✅ Tool Result: ${toolName}`;
+            
+            const jsonDiv = document.createElement('div');
+            jsonDiv.className = 'tool-json';
+            jsonDiv.textContent = JSON.stringify(result, null, 2);
+            
+            toolResultDiv.appendChild(header);
+            toolResultDiv.appendChild(jsonDiv);
+            
+            if (currentMessageDiv) {
+                currentMessageDiv.appendChild(toolResultDiv);
+            } else {
+                chatContainer.appendChild(toolResultDiv);
+            }
+            
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            currentToolResultDiv = toolResultDiv;
+            
+            return toolResultDiv;
+        }
+
+        function appendToMessage(content) {
+            if (!currentMessageDiv) {
+                currentMessageDiv = addMessage('', 'assistant');
+            }
+            
+            const contentDiv = currentMessageDiv.querySelector('.message-content');
+            if (contentDiv) {
+                contentDiv.textContent += content;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            const locale = languageSelect.value;
+
+            // Add user message
+            addMessage(message, 'user');
+            messageInput.value = '';
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<div class="loading"></div>';
+
+            // Reset state
+            currentMessageDiv = null;
+            currentToolCallDiv = null;
+            currentToolResultDiv = null;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ input: message, locale }),
+                });
+
+                if (!response.ok) {
+                    // Try to get error message from response
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorMessage;
+                    } catch (e) {
+                        // If response is not JSON, use status text
+                        errorMessage = response.statusText || errorMessage;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                // Check if response is SSE format
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('text/event-stream')) {
+                    throw new Error('Server did not return streaming response');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') {
+                                continue;
+                            }
+
+                            try {
+                                const parsed = JSON.parse(data);
+                                
+                                if (parsed.type === 'message') {
+                                    appendToMessage(parsed.content);
+                                } else if (parsed.type === 'tool_call') {
+                                    addToolCall(parsed.name, parsed.arguments);
+                                } else if (parsed.type === 'tool_result') {
+                                    addToolResult(parsed.name, parsed.result);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                addMessage(`Error: ${error.message}`, 'assistant');
+            } finally {
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
+                currentMessageDiv = null;
+                messageInput.focus();
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
