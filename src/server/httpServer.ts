@@ -3,6 +3,7 @@ import cors from "cors";
 import { runAgentLoop } from "../agent/agentLoop.js";
 import { toolDefinitions } from "../tools/definitions.js";
 import { toolHandlers } from "../tools/handlers.js";
+import { parseLocale } from "../config/locale.js";
 import type { AgentRequest, AgentResponseChunk } from "../types/shared.js";
 
 export function createServer(port: number = 3000): Express {
@@ -20,9 +21,9 @@ export function createServer(port: number = 3000): Express {
   // SSE endpoint for streaming agent responses
   app.post("/api/chat", async (req: Request, res: Response) => {
     try {
-      const { input, locale = "en", history } = req.body as {
+      const { input, locale, history } = req.body as {
         input?: string;
-        locale?: "en" | "he";
+        locale?: unknown;
         history?: { role?: string; content?: string }[];
       };
 
@@ -56,7 +57,7 @@ export function createServer(port: number = 3000): Express {
 
       const request: AgentRequest = {
         input,
-        locale: locale === "he" ? "he" : "en",
+        locale: parseLocale(locale),
         history: sanitizedHistory,
       };
 

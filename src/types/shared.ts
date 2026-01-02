@@ -1,3 +1,5 @@
+import type { Locale } from "../config/locale.js";
+
 export type ChatHistoryMessage = {
   role: "user" | "assistant";
   content: string;
@@ -5,7 +7,7 @@ export type ChatHistoryMessage = {
 
 export type AgentRequest = {
   input: string;
-  locale: "en" | "he";
+  locale: Locale;
   history?: ChatHistoryMessage[];
 };
 
