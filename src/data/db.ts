@@ -4,14 +4,16 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { seedDatabase } from "./seed.js";
 
+type DatabaseType = Database.Database;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, "..", "..");
-const dataDir = join(projectRoot, "data");
+const dataDir = join(projectRoot, "src", "data");
 const dbPath = join(dataDir, "pharmacy.db");
 const schemaPath = join(__dirname, "schema.sql");
 
-function initializeDatabase(): Database {
+function initializeDatabase(): DatabaseType {
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true });
   }
@@ -26,4 +28,4 @@ function initializeDatabase(): Database {
   return db;
 }
 
-export const db = initializeDatabase();
+export const db: DatabaseType = initializeDatabase();

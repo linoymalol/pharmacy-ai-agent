@@ -1,31 +1,5 @@
 import type { Database as DatabaseType } from "better-sqlite3";
-
-type UserRecord = {
-  id: string;
-  name: string;
-  language: "en" | "he";
-  email?: string;
-};
-
-type MedicationRecord = {
-  id: string;
-  name: string;
-  activeIngredient: string;
-  requiresPrescription: boolean;
-  stock: number;
-  dosage?: string;
-  usageInstructions?: string;
-};
-
-type PrescriptionRecord = {
-  id: string;
-  userId: string;
-  medicationId: string;
-  prescribedDate: string;
-  quantity: number;
-  refillsRemaining: number;
-  doctorName: string;
-};
+import type { UserRecord, MedicationRecord, PrescriptionRecord } from "./types.js";
 
 const users: UserRecord[] = [
   { id: "user1", name: "David Cohen", language: "he", email: "david.cohen@example.com" },

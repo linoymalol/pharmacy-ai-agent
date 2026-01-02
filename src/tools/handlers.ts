@@ -5,9 +5,8 @@ import {
   getUserById,
   getUserPrescriptions,
   getPrescriptionById,
-  type MedicationRecord,
-  type PrescriptionRecord,
-} from "../data/syntheticDb.js";
+} from "../data/repo.js";
+import type { MedicationRecord, PrescriptionRecord } from "../data/types.js";
 
 type GetMedicationInput = { name: string };
 type CheckStockInput = { medicationName: string };
