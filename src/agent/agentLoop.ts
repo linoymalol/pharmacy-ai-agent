@@ -9,15 +9,49 @@ export interface AgentLoopOptions {
   apiKey: string;
 }
 
-function convertToolsToOpenAIFormat(tools: ToolDefinition[]): OpenAI.Chat.Completions.ChatCompletionTool[] {
+type ResponseTool = {
+  type: "function";
+  name: string;
+  description?: string;
+  parameters: Record<string, unknown>;
+};
+
+type ResponseInputMessage = {
+  role: string;
+  content: string;
+  tool_call_id?: string;
+  tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+};
+
+function convertToolsToOpenAIFormat(tools: ToolDefinition[]): ResponseTool[] {
   return tools.map((tool) => ({
     type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-    },
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
   }));
+}
+
+function convertMessagesToResponsesInput(
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): ResponseInputMessage[] {
+  return messages.map((message) => {
+    if (typeof message.content !== "string") {
+      return {
+        role: message.role,
+        content: JSON.stringify(message.content ?? ""),
+        tool_call_id: "tool_call_id" in message ? message.tool_call_id : undefined,
+        tool_calls: "tool_calls" in message ? message.tool_calls : undefined,
+      };
+    }
+
+    return {
+      role: message.role,
+      content: message.content,
+      tool_call_id: "tool_call_id" in message ? message.tool_call_id : undefined,
+      tool_calls: "tool_calls" in message ? message.tool_calls : undefined,
+    };
+  });
 }
 
 export async function* runAgentLoop(
@@ -68,9 +102,9 @@ export async function* runAgentLoop(
     iteration++;
 
     try {
-      const stream = await openai.chat.completions.create({
+      const stream = await openai.responses.create({
         model: "gpt-4o", // Using GPT-4o as GPT-5 is not available
-        messages,
+        input: convertMessagesToResponsesInput(messages),
         tools: openaiTools.length > 0 ? openaiTools : undefined,
         tool_choice: openaiTools.length > 0 ? "auto" : undefined,
         stream: true,
@@ -84,46 +118,103 @@ export async function* runAgentLoop(
         role: "assistant",
         content: "",
       };
-      const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+      const toolCallsById = new Map<string, OpenAI.Chat.Completions.ChatCompletionMessageToolCall>();
+
+      const getOrCreateToolCall = (id: string, name?: string) => {
+        const existing = toolCallsById.get(id);
+        if (existing) {
+          if (name && !existing.function.name) {
+            existing.function.name = name;
+          }
+          return existing;
+        }
+        const toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall = {
+          id,
+          type: "function",
+          function: {
+            name: name ?? "",
+            arguments: "",
+          },
+        };
+        toolCallsById.set(id, toolCall);
+        return toolCall;
+      };
+
+      const appendToolCallArguments = (id: string, delta: string) => {
+        const toolCall = getOrCreateToolCall(id);
+        toolCall.function.arguments += delta;
+      };
 
       for await (const chunk of stream) {
-        const choice = chunk.choices[0];
-        if (!choice) continue;
-
-        const delta = choice.delta;
-
-        // Handle content streaming
-        if (delta.content) {
-          assistantMessage.content = (assistantMessage.content || "") + delta.content;
-          yield {
-            type: "message",
-            content: delta.content,
+        const event = chunk as {
+          type?: string;
+          delta?: string;
+          item?: {
+            id?: string;
+            type?: string;
+            name?: string;
+            arguments?: string;
+            call_id?: string;
           };
+          call_id?: string;
+          name?: string;
+          item_id?: string;
+          text?: string;
+        };
+
+        if (event.type === "response.output_text.delta") {
+          const delta = event.delta ?? "";
+          if (delta) {
+            assistantMessage.content = (assistantMessage.content || "") + delta;
+            yield {
+              type: "message",
+              content: delta,
+            };
+          }
+          continue;
         }
 
-        // Handle tool calls
-        if (delta.tool_calls) {
-          for (const toolCallDelta of delta.tool_calls) {
-            const index = toolCallDelta.index ?? 0;
-            if (!toolCalls[index]) {
-              toolCalls[index] = {
-                id: toolCallDelta.id || "",
-                type: "function",
-                function: {
-                  name: toolCallDelta.function?.name || "",
-                  arguments: toolCallDelta.function?.arguments || "",
-                },
-              };
-            } else {
-              toolCalls[index].function.arguments += toolCallDelta.function?.arguments || "";
+        if (event.type === "response.output_item.added" && event.item) {
+          const item = event.item;
+          if (item.type === "tool_call" || item.type === "function_call") {
+            const id = item.id ?? item.call_id ?? "";
+            const name = item.name ?? "";
+            const toolCall = getOrCreateToolCall(id, name);
+            if (item.arguments) {
+              toolCall.function.arguments = item.arguments;
             }
+          }
+          continue;
+        }
+
+        if (event.type === "response.output_item.delta" && event.item) {
+          const item = event.item;
+          if ((item.type === "tool_call" || item.type === "function_call") && item.arguments) {
+            const id = item.id ?? item.call_id ?? "";
+            appendToolCallArguments(id, item.arguments);
+          }
+          continue;
+        }
+
+        if (event.type === "response.function_call_arguments.delta") {
+          const id = event.call_id ?? event.item_id ?? "";
+          if (!id) continue;
+          const toolCall = getOrCreateToolCall(id, event.name);
+          toolCall.function.arguments += event.delta ?? "";
+          continue;
+        }
+
+        if (event.type === "response.output_text.done") {
+          const text = event.text ?? "";
+          if (text && !assistantMessage.content) {
+            assistantMessage.content = text;
           }
         }
       }
 
       // Add tool calls to assistant message if any
-      if (toolCalls.length > 0) {
-        assistantMessage.tool_calls = toolCalls;
+      if (toolCallsById.size > 0) {
+        assistantMessage.tool_calls = Array.from(toolCallsById.values());
       }
 
       messages.push(assistantMessage);
