@@ -9,7 +9,7 @@ import type { ToolDefinition, ToolHandlerMap } from "../tools/definitions.js";
 import type { AgentRequest, AgentResponseChunk } from "../types/shared.js";
 import { systemPrompt } from "./systemPrompt.js";
 import type { Logger } from "../utils/logger.js";
-import { createNullLogger } from "../utils/logger.js";
+import { createGlobalLogger } from "../utils/logger.js";
 
 export interface AgentLoopOptions {
   tools: ToolDefinition[];
@@ -95,7 +95,7 @@ export async function* runAgentLoop(
 ): AsyncGenerator<AgentResponseChunk> {
   const { input, locale, history = [] } = request;
   const { tools, handlers, apiKey, logger: providedLogger } = options;
-  const logger = providedLogger ?? createNullLogger();
+  const logger = providedLogger ?? createGlobalLogger();
 
   if (!apiKey) {
     yield {

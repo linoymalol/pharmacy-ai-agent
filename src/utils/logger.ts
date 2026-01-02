@@ -1,3 +1,5 @@
+import pino from "pino";
+
 export type LogMeta = Record<string, unknown>;
 
 export type Logger = {
@@ -28,31 +30,28 @@ const sanitizeMeta = (meta?: LogMeta): LogMeta | undefined => {
   return sanitized;
 };
 
-const formatMessage = (requestId: string | undefined, message: string, meta?: LogMeta): string => {
-  const prefix = requestId ? `[${requestId}] ` : "";
-  const sanitizedMeta = sanitizeMeta(meta);
-  if (!sanitizedMeta || Object.keys(sanitizedMeta).length === 0) {
-    return `${prefix}${message}`;
-  }
-  return `${prefix}${message} ${JSON.stringify(sanitizedMeta)}`;
+const baseLogger = pino({
+  level: process.env.LOG_LEVEL || "info",
+});
+
+export const createLogger = (requestId?: string): Logger => {
+  const logger = requestId ? baseLogger.child({ requestId }) : baseLogger;
+
+  return {
+    info: (message, meta) => {
+      logger.info(sanitizeMeta(meta), message);
+    },
+    warn: (message, meta) => {
+      logger.warn(sanitizeMeta(meta), message);
+    },
+    error: (message, meta) => {
+      logger.error(sanitizeMeta(meta), message);
+    },
+  };
 };
 
-export const createLogger = (requestId?: string): Logger => ({
-  info: (message, meta) => {
-    console.log(formatMessage(requestId, message, meta));
-  },
-  warn: (message, meta) => {
-    console.warn(formatMessage(requestId, message, meta));
-  },
-  error: (message, meta) => {
-    console.error(formatMessage(requestId, message, meta));
-  },
-});
+export const createGlobalLogger = (): Logger =>
+  createLogger(undefined);
 
-export const createNullLogger = (): Logger => ({
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-});
 
 export const truncateLogValue = truncateString;
