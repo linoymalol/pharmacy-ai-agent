@@ -13,35 +13,49 @@ type CheckStockInput = { medicationName: string };
 type GetUserPrescriptionsInput = { userId: string };
 type GetPrescriptionDetailsInput = { prescriptionId: string };
 
+type HandlerResult<T> = Promise<({ success: true } & T) | { success: false; error: string }>;
+
+const getStringField = (
+  input: unknown,
+  field: string
+): { ok: true; value: string } | { ok: false; error: string } => {
+  if (!input || typeof input !== "object") {
+    return { ok: false, error: `Invalid input: '${field}' parameter is required and must be a string` };
+  }
+  const value = (input as Record<string, unknown>)[field];
+  if (!value || typeof value !== "string") {
+    return { ok: false, error: `Invalid input: '${field}' parameter is required and must be a string` };
+  }
+  return { ok: true, value };
+};
+
+const ensureMedicationByName = (name: string): MedicationRecord | { error: string } => {
+  const medication = getMedicationByName(name);
+  if (!medication) {
+    return {
+      error: `Medication '${name}' not found in our database. Please check the spelling or ask the customer for more details.`,
+    };
+  }
+  return medication;
+};
+
 async function handleGetMedicationByName(
   input: unknown
-): Promise<{
-  success: boolean;
-  medication?: MedicationRecord;
-  error?: string;
-}> {
+): HandlerResult<{ medication: MedicationRecord }> {
   try {
-    const { name } = input as GetMedicationInput;
-    
-    if (!name || typeof name !== "string") {
-      return {
-        success: false,
-        error: "Invalid input: 'name' parameter is required and must be a string",
-      };
+    const nameResult = getStringField(input as GetMedicationInput, "name");
+    if (!nameResult.ok) {
+      return { success: false, error: nameResult.error };
     }
 
-    const medication = getMedicationByName(name);
-    
-    if (!medication) {
-      return {
-        success: false,
-        error: `Medication '${name}' not found in our database. Please check the spelling or ask the customer for more details.`,
-      };
+    const medicationResult = ensureMedicationByName(nameResult.value);
+    if ("error" in medicationResult) {
+      return { success: false, error: medicationResult.error };
     }
 
     return {
       success: true,
-      medication,
+      medication: medicationResult,
     };
   } catch (error) {
     return {
@@ -53,39 +67,25 @@ async function handleGetMedicationByName(
 
 async function handleCheckStock(
   input: unknown
-): Promise<{
-  success: boolean;
-  medicationName?: string;
-  inStock?: boolean;
-  stockCount?: number;
-  error?: string;
-}> {
+): HandlerResult<{ medicationName: string; inStock: boolean; stockCount: number }> {
   try {
-    const { medicationName } = input as CheckStockInput;
-    
-    if (!medicationName || typeof medicationName !== "string") {
-      return {
-        success: false,
-        error: "Invalid input: 'medicationName' parameter is required and must be a string",
-      };
+    const medicationNameResult = getStringField(input as CheckStockInput, "medicationName");
+    if (!medicationNameResult.ok) {
+      return { success: false, error: medicationNameResult.error };
     }
 
-    const medication = getMedicationByName(medicationName);
-    
-    if (!medication) {
-      return {
-        success: false,
-        error: `Medication '${medicationName}' not found in our database.`,
-      };
+    const medicationResult = ensureMedicationByName(medicationNameResult.value);
+    if ("error" in medicationResult) {
+      return { success: false, error: medicationResult.error };
     }
 
-    const inStock = medication.stock > 0;
+    const inStock = medicationResult.stock > 0;
     
     return {
       success: true,
-      medicationName: medication.name,
+      medicationName: medicationResult.name,
       inStock,
-      stockCount: medication.stock,
+      stockCount: medicationResult.stock,
     };
   } catch (error) {
     return {
@@ -97,36 +97,27 @@ async function handleCheckStock(
 
 async function handleGetUserPrescriptions(
   input: unknown
-): Promise<{
-  success: boolean;
-  userId?: string;
-  prescriptions?: PrescriptionRecord[];
-  error?: string;
-}> {
+): HandlerResult<{ userId: string; prescriptions: PrescriptionRecord[] }> {
   try {
-    const { userId } = input as GetUserPrescriptionsInput;
-    
-    if (!userId || typeof userId !== "string") {
-      return {
-        success: false,
-        error: "Invalid input: 'userId' parameter is required and must be a string",
-      };
+    const userIdResult = getStringField(input as GetUserPrescriptionsInput, "userId");
+    if (!userIdResult.ok) {
+      return { success: false, error: userIdResult.error };
     }
 
-    const user = getUserById(userId);
+    const user = getUserById(userIdResult.value);
     
     if (!user) {
       return {
         success: false,
-        error: `User '${userId}' not found in our database.`,
+        error: `User '${userIdResult.value}' not found in our database.`,
       };
     }
 
-    const prescriptions = getUserPrescriptions(userId);
+    const prescriptions = getUserPrescriptions(userIdResult.value);
     
     return {
       success: true,
-      userId,
+      userId: userIdResult.value,
       prescriptions,
     };
   } catch (error) {
@@ -139,30 +130,24 @@ async function handleGetUserPrescriptions(
 
 async function handleGetPrescriptionDetails(
   input: unknown
-): Promise<{
-  success: boolean;
-  prescription?: PrescriptionRecord & {
+): HandlerResult<{
+  prescription: PrescriptionRecord & {
     medication?: MedicationRecord;
     user?: { name: string };
   };
-  error?: string;
 }> {
   try {
-    const { prescriptionId } = input as GetPrescriptionDetailsInput;
-    
-    if (!prescriptionId || typeof prescriptionId !== "string") {
-      return {
-        success: false,
-        error: "Invalid input: 'prescriptionId' parameter is required and must be a string",
-      };
+    const prescriptionIdResult = getStringField(input as GetPrescriptionDetailsInput, "prescriptionId");
+    if (!prescriptionIdResult.ok) {
+      return { success: false, error: prescriptionIdResult.error };
     }
 
-    const prescription = getPrescriptionById(prescriptionId);
+    const prescription = getPrescriptionById(prescriptionIdResult.value);
     
     if (!prescription) {
       return {
         success: false,
-        error: `Prescription '${prescriptionId}' not found in our database.`,
+        error: `Prescription '${prescriptionIdResult.value}' not found in our database.`,
       };
     }
 
