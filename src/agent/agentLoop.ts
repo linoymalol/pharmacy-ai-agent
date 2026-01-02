@@ -1,15 +1,218 @@
-import type { ToolDefinition, ToolHandlerMap } from "../tools/definitions";
-import type { AgentRequest, AgentResponseChunk } from "../types/shared";
+import OpenAI from "openai";
+import type { ToolDefinition, ToolHandlerMap } from "../tools/definitions.js";
+import type { AgentRequest, AgentResponseChunk } from "../types/shared.js";
+import { systemPrompt } from "./systemPrompt.js";
 
 export interface AgentLoopOptions {
   tools: ToolDefinition[];
   handlers: ToolHandlerMap;
+  apiKey: string;
+}
+
+function convertToolsToOpenAIFormat(tools: ToolDefinition[]): OpenAI.Chat.Completions.ChatCompletionTool[] {
+  return tools.map((tool) => ({
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }));
 }
 
 export async function* runAgentLoop(
-  _request: AgentRequest,
-  _options: AgentLoopOptions
+  request: AgentRequest,
+  options: AgentLoopOptions
 ): AsyncGenerator<AgentResponseChunk> {
-  // TODO: implement stateless agent loop with streaming support
-  yield { type: "message", content: "TODO" };
+  const { input, locale } = request;
+  const { tools, handlers, apiKey } = options;
+
+  if (!apiKey) {
+    yield {
+      type: "message",
+      content: "Error: OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable.",
+    };
+    return;
+  }
+
+  const openai = new OpenAI({
+    apiKey,
+  });
+
+  const openaiTools = convertToolsToOpenAIFormat(tools);
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: systemPrompt,
+    },
+    {
+      role: "user",
+      content: input,
+    },
+  ];
+
+  let maxIterations = 10; // Prevent infinite loops
+  let iteration = 0;
+
+  while (iteration < maxIterations) {
+    iteration++;
+
+    try {
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4o", // Using GPT-4o as GPT-5 is not available
+        messages,
+        tools: openaiTools.length > 0 ? openaiTools : undefined,
+        tool_choice: openaiTools.length > 0 ? "auto" : undefined,
+        stream: true,
+        temperature: 0.7,
+      }).catch((error) => {
+        console.error("OpenAI API error:", error);
+        throw error;
+      });
+
+      let assistantMessage: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
+        role: "assistant",
+        content: "",
+      };
+      const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+
+      for await (const chunk of stream) {
+        const choice = chunk.choices[0];
+        if (!choice) continue;
+
+        const delta = choice.delta;
+
+        // Handle content streaming
+        if (delta.content) {
+          assistantMessage.content = (assistantMessage.content || "") + delta.content;
+          yield {
+            type: "message",
+            content: delta.content,
+          };
+        }
+
+        // Handle tool calls
+        if (delta.tool_calls) {
+          for (const toolCallDelta of delta.tool_calls) {
+            const index = toolCallDelta.index ?? 0;
+            if (!toolCalls[index]) {
+              toolCalls[index] = {
+                id: toolCallDelta.id || "",
+                type: "function",
+                function: {
+                  name: toolCallDelta.function?.name || "",
+                  arguments: toolCallDelta.function?.arguments || "",
+                },
+              };
+            } else {
+              toolCalls[index].function.arguments += toolCallDelta.function?.arguments || "";
+            }
+          }
+        }
+      }
+
+      // Add tool calls to assistant message if any
+      if (toolCalls.length > 0) {
+        assistantMessage.tool_calls = toolCalls;
+      }
+
+      messages.push(assistantMessage);
+
+      // Execute tool calls if any
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          const toolName = toolCall.function.name;
+          const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+
+          yield {
+            type: "tool_call",
+            name: toolName,
+            arguments: toolArgs,
+          };
+
+          const handler = handlers[toolName];
+          if (!handler) {
+            const errorResult = {
+              success: false,
+              error: `Tool handler '${toolName}' not found`,
+            };
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(errorResult),
+            });
+            yield {
+              type: "tool_result",
+              name: toolName,
+              result: errorResult,
+            };
+            continue;
+          }
+
+          try {
+            const result = await handler(toolArgs);
+            const resultString = JSON.stringify(result);
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: resultString,
+            });
+            yield {
+              type: "tool_result",
+              name: toolName,
+              result,
+            };
+          } catch (error) {
+            const errorResult = {
+              success: false,
+              error: `Error executing tool: ${error instanceof Error ? error.message : "Unknown error"}`,
+            };
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(errorResult),
+            });
+            yield {
+              type: "tool_result",
+              name: toolName,
+              result: errorResult,
+            };
+          }
+        }
+        // Continue the loop to get the assistant's response after tool execution
+        continue;
+      } else {
+        // No tool calls, conversation is complete
+        break;
+      }
+    } catch (error) {
+      console.error("Error in agent loop iteration:", error);
+      let errorMessage = "Unknown error occurred";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        // Check for OpenAI API specific errors
+        if (error.message.includes("API key")) {
+          errorMessage = "OpenAI API key is invalid or missing. Please check your OPENAI_API_KEY environment variable.";
+        } else if (error.message.includes("rate limit")) {
+          errorMessage = "OpenAI API rate limit exceeded. Please try again later.";
+        } else if (error.message.includes("model")) {
+          errorMessage = "OpenAI model error. Please check the model name.";
+        }
+      }
+      
+      yield {
+        type: "message",
+        content: `Error: ${errorMessage}`,
+      };
+      break;
+    }
+  }
+
+  if (iteration >= maxIterations) {
+    yield {
+      type: "message",
+      content: "Maximum iteration limit reached. Please try again with a simpler query.",
+    };
+  }
 }
