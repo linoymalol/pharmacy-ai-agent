@@ -3,14 +3,19 @@ export type ToolDefinition = {
   description: string;
   parameters: {
     type: "object";
-    properties: Record<string, {
-      type: string;
-      description: string;
-      enum?: string[];
-    }>;
+    properties: Record<
+      string,
+      {
+        type: string;
+        description: string;
+        enum?: string[];
+      }
+    >;
     required: string[];
+    additionalProperties: false;
   };
 };
+
 
 export type ToolHandler = (input: unknown) => Promise<unknown>;
 
@@ -29,6 +34,7 @@ export const toolDefinitions: ToolDefinition[] = [
         },
       },
       required: ["name"],
+      additionalProperties: false
     },
   },
   {
@@ -43,6 +49,7 @@ export const toolDefinitions: ToolDefinition[] = [
         },
       },
       required: ["medicationName"],
+      additionalProperties: false
     },
   },
   {
@@ -57,6 +64,7 @@ export const toolDefinitions: ToolDefinition[] = [
         },
       },
       required: ["userId"],
+      additionalProperties: false
     },
   },
   {
@@ -71,6 +79,7 @@ export const toolDefinitions: ToolDefinition[] = [
         },
       },
       required: ["prescriptionId"],
+      additionalProperties: false
     },
   },
 ];

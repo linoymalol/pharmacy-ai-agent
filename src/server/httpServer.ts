@@ -20,9 +20,10 @@ export function createServer(port: number = 3000): Express {
   // SSE endpoint for streaming agent responses
   app.post("/api/chat", async (req: Request, res: Response) => {
     try {
-      const { input, locale = "en" } = req.body as {
+      const { input, locale = "en", history } = req.body as {
         input?: string;
         locale?: "en" | "he";
+        history?: { role?: string; content?: string }[];
       };
 
       if (!input || typeof input !== "string") {
@@ -42,9 +43,21 @@ export function createServer(port: number = 3000): Express {
       res.setHeader("Connection", "keep-alive");
       res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
+      const sanitizedHistory = Array.isArray(history)
+        ? history
+            .filter((message) => message && typeof message === "object")
+            .filter((message) => message.role === "user" || message.role === "assistant")
+            .map((message) => ({
+              role: message.role as "user" | "assistant",
+              content: typeof message.content === "string" ? message.content : "",
+            }))
+            .filter((message) => message.content.length > 0)
+        : undefined;
+
       const request: AgentRequest = {
         input,
         locale: locale === "he" ? "he" : "en",
+        history: sanitizedHistory,
       };
 
       try {
