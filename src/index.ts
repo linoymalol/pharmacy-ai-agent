@@ -21,7 +21,6 @@ if (result.error) {
 // Debug: Log if API key is loaded (without exposing the key)
 if (process.env.OPENAI_API_KEY) {
   console.log("✓ OpenAI API key loaded from environment");
-  console.log("  Key length:", process.env.OPENAI_API_KEY.length, "characters");
 } else {
   console.warn("⚠ WARNING: OPENAI_API_KEY not found in environment variables");
   console.warn("  .env file path attempted:", envPath);
