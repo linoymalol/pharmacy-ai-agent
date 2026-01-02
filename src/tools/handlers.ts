@@ -143,7 +143,7 @@ async function handleGetPrescriptionDetails(
   success: boolean;
   prescription?: PrescriptionRecord & {
     medication?: MedicationRecord;
-    user?: { name: string; language: string };
+    user?: { name: string };
   };
   error?: string;
 }> {
@@ -174,7 +174,7 @@ async function handleGetPrescriptionDetails(
       prescription: {
         ...prescription,
         medication: medication || undefined,
-        user: user ? { name: user.name, language: user.language } : undefined,
+        user: user ? { name: user.name } : undefined,
       },
     };
   } catch (error) {

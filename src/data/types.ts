@@ -1,10 +1,6 @@
-import type { Locale } from "../config/locale.js";
-
 export type UserRecord = {
     id: string;
     name: string;
-    language: Locale;
-    email?: string;
   };
   
 export type MedicationRecord = {

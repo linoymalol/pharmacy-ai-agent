@@ -38,7 +38,7 @@ export function getMedicationById(id: string): MedicationRecord | null {
 export function getUserById(id: string): UserRecord | null {
   const row = db
     .prepare<[string], UserRecord>(
-      "SELECT id, name, language, email FROM users WHERE id = ?"
+      "SELECT id, name FROM users WHERE id = ?"
     )
     .get(id);
   return row ?? null;

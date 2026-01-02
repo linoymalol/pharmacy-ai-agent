@@ -2,9 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  language TEXT NOT NULL CHECK (language IN ('en', 'he')),
-  email TEXT
+  name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS medications (
