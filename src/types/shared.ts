@@ -1,6 +1,12 @@
+export type ChatHistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type AgentRequest = {
   input: string;
   locale: "en" | "he";
+  history?: ChatHistoryMessage[];
 };
 
 export type AgentResponseChunk =
