@@ -74,44 +74,44 @@ function mapMedication(row: MedicationRow | null): MedicationRecord | null {
 export function getMedicationByName(name: string): MedicationRecord | null {
   const normalizedName = name.toLowerCase().trim();
   const row = db
-    .prepare<MedicationRow>(
+    .prepare<[string], MedicationRow>(
       "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE LOWER(name) = ?"
     )
-    .get(normalizedName) as MedicationRow | undefined;
+    .get(normalizedName);
   return mapMedication(row ?? null);
 }
 
 export function getMedicationById(id: string): MedicationRecord | null {
   const row = db
-    .prepare<MedicationRow>(
+    .prepare<[string], MedicationRow>(
       "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE id = ?"
     )
-    .get(id) as MedicationRow | undefined;
+    .get(id);
   return mapMedication(row ?? null);
 }
 
 export function getUserById(id: string): UserRecord | null {
   const row = db
-    .prepare<UserRecord>(
+    .prepare<[string], UserRecord>(
       "SELECT id, name, language, email FROM users WHERE id = ?"
     )
-    .get(id) as UserRecord | undefined;
+    .get(id);
   return row ?? null;
 }
 
 export function getUserPrescriptions(userId: string): PrescriptionRecord[] {
   return db
-    .prepare<PrescriptionRecord>(
+    .prepare<[string], PrescriptionRecord>(
       "SELECT id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName FROM prescriptions WHERE userId = ?"
     )
-    .all(userId) as PrescriptionRecord[];
+    .all(userId);
 }
 
 export function getPrescriptionById(id: string): PrescriptionRecord | null {
   const row = db
-    .prepare<PrescriptionRecord>(
+    .prepare<[string], PrescriptionRecord>(
       "SELECT id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName FROM prescriptions WHERE id = ?"
     )
-    .get(id) as PrescriptionRecord | undefined;
+    .get(id);
   return row ?? null;
 }
