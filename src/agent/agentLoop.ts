@@ -1,4 +1,10 @@
 import OpenAI from "openai";
+import type {
+  EasyInputMessage,
+  FunctionTool,
+  ResponseFunctionToolCall,
+  ResponseInputItem,
+} from "openai/resources/responses/responses";
 import type { ToolDefinition, ToolHandlerMap } from "../tools/definitions.js";
 import type { AgentRequest, AgentResponseChunk } from "../types/shared.js";
 import { systemPrompt } from "./systemPrompt.js";
@@ -9,47 +15,22 @@ export interface AgentLoopOptions {
   apiKey: string;
 }
 
-type ResponseTool = {
-  type: "function";
-  name: string;
-  description?: string;
-  parameters: Record<string, unknown>;
-};
-
-type ToolCall = {
-  id: string;
-  type: "function";
-  function: {
-    name: string;
-    arguments: string;
-  };
-};
-
-type ResponseInputMessage = {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-  tool_call_id?: string;
-  tool_calls?: ToolCall[];
-};
-
-function convertToolsToOpenAIFormat(tools: ToolDefinition[]): ResponseTool[] {
+function convertToolsToOpenAIFormat(tools: ToolDefinition[]): FunctionTool[] {
   return tools.map((tool) => ({
     type: "function",
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
+    strict: true,
   }));
 }
 
-function convertMessagesToResponsesInput(messages: ResponseInputMessage[]): ResponseInputMessage[] {
-  return messages.map((message) => {
-    return {
-      role: message.role,
-      content: message.content,
-      tool_call_id: message.tool_call_id,
-      tool_calls: message.tool_calls,
-    };
-  });
+function createInputMessage(role: EasyInputMessage["role"], content: string): EasyInputMessage {
+  return {
+    role,
+    content,
+    type: "message",
+  };
 }
 
 export async function* runAgentLoop(
@@ -72,26 +53,14 @@ export async function* runAgentLoop(
   });
 
   const openaiTools = convertToolsToOpenAIFormat(tools);
-  const messages: ResponseInputMessage[] = [
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-    {
-      role: "system",
-      content: `The customer's preferred language is ${locale}. Respond in ${locale}.`,
-    },
+  const messages: ResponseInputItem[] = [
+    createInputMessage("system", systemPrompt),
+    createInputMessage("system", `The customer's preferred language is ${locale}. Respond in ${locale}.`),
   ];
   for (const pastMessage of history) {
-    messages.push({
-      role: pastMessage.role,
-      content: pastMessage.content,
-    });
+    messages.push(createInputMessage(pastMessage.role, pastMessage.content));
   }
-  messages.push({
-    role: "user",
-    content: input,
-  });
+  messages.push(createInputMessage("user", input));
 
   let maxIterations = 10; // Prevent infinite loops
   let iteration = 0;
@@ -102,7 +71,7 @@ export async function* runAgentLoop(
     try {
       const stream = await openai.responses.create({
         model: "gpt-4o", // Using GPT-4o as GPT-5 is not available
-        input: convertMessagesToResponsesInput(messages),
+        input: messages,
         tools: openaiTools.length > 0 ? openaiTools : undefined,
         tool_choice: openaiTools.length > 0 ? "auto" : undefined,
         stream: true,
@@ -112,11 +81,8 @@ export async function* runAgentLoop(
         throw error;
       });
 
-      let assistantMessage: ResponseInputMessage = {
-        role: "assistant",
-        content: "",
-      };
-      const toolCallsById = new Map<string, ToolCall>();
+      let assistantMessage: EasyInputMessage = createInputMessage("assistant", "");
+      const toolCallsById = new Map<string, ResponseFunctionToolCall>();
 
       const getOrCreateToolCall = (id: string, name?: string) => {
         const existing = toolCallsById.get(id);
@@ -126,13 +92,11 @@ export async function* runAgentLoop(
           }
           return existing;
         }
-        const toolCall: ToolCall = {
-          id,
-          type: "function",
-          function: {
-            name: name ?? "",
-            arguments: "",
-          },
+        const toolCall: ResponseFunctionToolCall = {
+          type: "function_call",
+          call_id: id,
+          name: name ?? "",
+          arguments: "",
         };
         toolCallsById.set(id, toolCall);
         return toolCall;
@@ -140,7 +104,7 @@ export async function* runAgentLoop(
 
       const appendToolCallArguments = (id: string, delta: string) => {
         const toolCall = getOrCreateToolCall(id);
-        toolCall.function.arguments += delta;
+        toolCall.arguments += delta;
       };
 
       for await (const chunk of stream) {
@@ -163,7 +127,7 @@ export async function* runAgentLoop(
         if (event.type === "response.output_text.delta") {
           const delta = event.delta ?? "";
           if (delta) {
-            assistantMessage.content = (assistantMessage.content || "") + delta;
+            assistantMessage.content = `${assistantMessage.content}${delta}`;
             yield {
               type: "message",
               content: delta,
@@ -175,11 +139,11 @@ export async function* runAgentLoop(
         if (event.type === "response.output_item.added" && event.item) {
           const item = event.item;
           if (item.type === "tool_call" || item.type === "function_call") {
-            const id = item.id ?? item.call_id ?? "";
+            const id = item.call_id ?? item.id ?? "";
             const name = item.name ?? "";
             const toolCall = getOrCreateToolCall(id, name);
             if (item.arguments) {
-              toolCall.function.arguments = item.arguments;
+              toolCall.arguments = item.arguments;
             }
           }
           continue;
@@ -188,7 +152,7 @@ export async function* runAgentLoop(
         if (event.type === "response.output_item.delta" && event.item) {
           const item = event.item;
           if ((item.type === "tool_call" || item.type === "function_call") && item.arguments) {
-            const id = item.id ?? item.call_id ?? "";
+            const id = item.call_id ?? item.id ?? "";
             appendToolCallArguments(id, item.arguments);
           }
           continue;
@@ -198,7 +162,7 @@ export async function* runAgentLoop(
           const id = event.call_id ?? event.item_id ?? "";
           if (!id) continue;
           const toolCall = getOrCreateToolCall(id, event.name);
-          toolCall.function.arguments += event.delta ?? "";
+          toolCall.arguments += event.delta ?? "";
           continue;
         }
 
@@ -211,19 +175,24 @@ export async function* runAgentLoop(
       }
 
       // Add tool calls to assistant message if any
-      if (toolCallsById.size > 0) {
-        assistantMessage.tool_calls = Array.from(toolCallsById.values());
+      if (assistantMessage.content) {
+        messages.push(assistantMessage);
       }
 
-      messages.push(assistantMessage);
+      const toolCalls = Array.from(toolCallsById.values());
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          messages.push(toolCall);
+        }
+      }
 
       // Execute tool calls if any
       if (toolCalls.length > 0) {
         for (const toolCall of toolCalls) {
-          const toolName = toolCall.function.name;
+          const toolName = toolCall.name;
           let toolArgs: unknown = {};
           try {
-            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+            toolArgs = JSON.parse(toolCall.arguments || "{}");
           } catch (error) {
             const errorResult = {
               success: false,
@@ -232,9 +201,9 @@ export async function* runAgentLoop(
               }`,
             };
             messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(errorResult),
+              type: "function_call_output",
+              call_id: toolCall.call_id,
+              output: JSON.stringify(errorResult),
             });
             yield {
               type: "tool_result",
@@ -257,9 +226,9 @@ export async function* runAgentLoop(
               error: `Tool handler '${toolName}' not found`,
             };
             messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(errorResult),
+              type: "function_call_output",
+              call_id: toolCall.call_id,
+              output: JSON.stringify(errorResult),
             });
             yield {
               type: "tool_result",
@@ -273,9 +242,9 @@ export async function* runAgentLoop(
             const result = await handler(toolArgs);
             const resultString = JSON.stringify(result);
             messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: resultString,
+              type: "function_call_output",
+              call_id: toolCall.call_id,
+              output: resultString,
             });
             yield {
               type: "tool_result",
@@ -288,9 +257,9 @@ export async function* runAgentLoop(
               error: `Error executing tool: ${error instanceof Error ? error.message : "Unknown error"}`,
             };
             messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(errorResult),
+              type: "function_call_output",
+              call_id: toolCall.call_id,
+              output: JSON.stringify(errorResult),
             });
             yield {
               type: "tool_result",
