@@ -8,11 +8,14 @@ import type {
 import type { ToolDefinition, ToolHandlerMap } from "../tools/definitions.js";
 import type { AgentRequest, AgentResponseChunk } from "../types/shared.js";
 import { systemPrompt } from "./systemPrompt.js";
+import type { Logger } from "../utils/logger.js";
+import { createGlobalLogger } from "../utils/logger.js";
 
 export interface AgentLoopOptions {
   tools: ToolDefinition[];
   handlers: ToolHandlerMap;
   apiKey: string;
+  logger?: Logger;
 }
 
 function convertToolsToOpenAIFormat(tools: ToolDefinition[]): FunctionTool[] {
@@ -33,12 +36,66 @@ function createInputMessage(role: EasyInputMessage["role"], content: string): Ea
   };
 }
 
+const parseToolArguments = (
+  toolName: string,
+  rawArguments: string,
+  logger: Logger
+): { ok: true; args: unknown } | { ok: false; error: string } => {
+  try {
+    return { ok: true, args: JSON.parse(rawArguments || "{}") };
+  } catch (error) {
+    const errorMessage = `Invalid tool arguments for '${toolName}': ${
+      error instanceof Error ? error.message : "Unknown error"
+    }`;
+    logger.warn("Tool arguments parse failed", { toolName });
+    return { ok: false, error: errorMessage };
+  }
+};
+
+const formatToolError = (message: string): { success: false; error: string } => ({
+  success: false,
+  error: message,
+});
+
+const normalizeAgentError = (error: unknown): string => {
+  if (error instanceof Error) {
+    if (error.message.includes("API key")) {
+      return "OpenAI API key is invalid or missing. Please check your OPENAI_API_KEY environment variable.";
+    }
+    if (error.message.includes("rate limit")) {
+      return "OpenAI API rate limit exceeded. Please try again later.";
+    }
+    if (error.message.includes("model")) {
+      return "OpenAI model error. Please check the model name.";
+    }
+    return error.message;
+  }
+  return "Unknown error occurred";
+};
+
+const buildMessages = (
+  locale: AgentRequest["locale"],
+  history: AgentRequest["history"] | undefined,
+  input: string
+): ResponseInputItem[] => {
+  const messages: ResponseInputItem[] = [
+    createInputMessage("system", systemPrompt),
+    createInputMessage("system", `The customer's preferred language is ${locale}. Respond in ${locale}.`),
+  ];
+  for (const pastMessage of history ?? []) {
+    messages.push(createInputMessage(pastMessage.role, pastMessage.content));
+  }
+  messages.push(createInputMessage("user", input));
+  return messages;
+};
+
 export async function* runAgentLoop(
   request: AgentRequest,
   options: AgentLoopOptions
 ): AsyncGenerator<AgentResponseChunk> {
   const { input, locale, history = [] } = request;
-  const { tools, handlers, apiKey } = options;
+  const { tools, handlers, apiKey, logger: providedLogger } = options;
+  const logger = providedLogger ?? createGlobalLogger();
 
   if (!apiKey) {
     yield {
@@ -53,32 +110,31 @@ export async function* runAgentLoop(
   });
 
   const openaiTools = convertToolsToOpenAIFormat(tools);
-  const messages: ResponseInputItem[] = [
-    createInputMessage("system", systemPrompt),
-    createInputMessage("system", `The customer's preferred language is ${locale}. Respond in ${locale}.`),
-  ];
-  for (const pastMessage of history) {
-    messages.push(createInputMessage(pastMessage.role, pastMessage.content));
-  }
-  messages.push(createInputMessage("user", input));
+  const messages: ResponseInputItem[] = buildMessages(locale, history, input);
 
   let maxIterations = 10; // Prevent infinite loops
   let iteration = 0;
 
   while (iteration < maxIterations) {
     iteration++;
+    logger.info("Agent loop iteration", { iteration });
 
     try {
-      const stream = await openai.responses.create({
-        model: process.env.OPENAI_MODEL || "gpt-5",
-        input: messages,
-        tools: openaiTools.length > 0 ? openaiTools : undefined,
-        tool_choice: openaiTools.length > 0 ? "auto" : undefined,
-        stream: true
-      }).catch((error) => {
-        console.error("OpenAI API error:", error);
-        throw error;
-      });
+      const model = process.env.OPENAI_MODEL || "gpt-5";
+      const openAiStart = Date.now();
+      logger.info("OpenAI request start", { model, toolCount: openaiTools.length });
+      const stream = await openai.responses
+        .create({
+          model,
+          input: messages,
+          tools: openaiTools.length > 0 ? openaiTools : undefined,
+          tool_choice: openaiTools.length > 0 ? "auto" : undefined,
+          stream: true,
+        })
+        .catch((error) => {
+          logger.error("OpenAI API error", { message: error instanceof Error ? error.message : "Unknown error" });
+          throw error;
+        });
 
       let assistantMessage: EasyInputMessage = createInputMessage("assistant", "");
       const toolCallsById = new Map<string, ResponseFunctionToolCall>();
@@ -205,6 +261,7 @@ export async function* runAgentLoop(
           }
         }
       }
+      logger.info("OpenAI request end", { durationMs: Date.now() - openAiStart });
 
       // Add tool calls to assistant message if any
       if (assistantMessage.content) {
@@ -224,16 +281,9 @@ export async function* runAgentLoop(
       if (toolCalls.length > 0) {
         for (const toolCall of toolCalls) {
           const toolName = toolCall.name;
-          let toolArgs: unknown = {};
-          try {
-            toolArgs = JSON.parse(toolCall.arguments || "{}");
-          } catch (error) {
-            const errorResult = {
-              success: false,
-              error: `Invalid tool arguments for '${toolName}': ${
-                error instanceof Error ? error.message : "Unknown error"
-              }`,
-            };
+          const parsedArgs = parseToolArguments(toolName, toolCall.arguments, logger);
+          if (!parsedArgs.ok) {
+            const errorResult = formatToolError(parsedArgs.error);
             messages.push({
               type: "function_call_output",
               call_id: toolCall.call_id,
@@ -246,6 +296,7 @@ export async function* runAgentLoop(
             };
             continue;
           }
+          const toolArgs = parsedArgs.args;
 
           yield {
             type: "tool_call",
@@ -255,10 +306,7 @@ export async function* runAgentLoop(
 
           const handler = handlers[toolName];
           if (!handler) {
-            const errorResult = {
-              success: false,
-              error: `Tool handler '${toolName}' not found`,
-            };
+            const errorResult = formatToolError(`Tool handler '${toolName}' not found`);
             messages.push({
               type: "function_call_output",
               call_id: toolCall.call_id,
@@ -272,6 +320,7 @@ export async function* runAgentLoop(
             continue;
           }
 
+          const toolStart = Date.now();
           try {
             const result = await handler(toolArgs);
             const resultString = JSON.stringify(result);
@@ -280,21 +329,22 @@ export async function* runAgentLoop(
               call_id: toolCall.call_id,
               output: resultString,
             });
+            logger.info("Tool call success", { toolName, durationMs: Date.now() - toolStart });
             yield {
               type: "tool_result",
               name: toolName,
               result,
             };
           } catch (error) {
-            const errorResult = {
-              success: false,
-              error: `Error executing tool: ${error instanceof Error ? error.message : "Unknown error"}`,
-            };
+            const errorResult = formatToolError(
+              `Error executing tool: ${error instanceof Error ? error.message : "Unknown error"}`
+            );
             messages.push({
               type: "function_call_output",
               call_id: toolCall.call_id,
               output: JSON.stringify(errorResult),
             });
+            logger.warn("Tool call failed", { toolName, durationMs: Date.now() - toolStart });
             yield {
               type: "tool_result",
               name: toolName,
@@ -309,21 +359,10 @@ export async function* runAgentLoop(
         break;
       }
     } catch (error) {
-      console.error("Error in agent loop iteration:", error);
-      let errorMessage = "Unknown error occurred";
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        // Check for OpenAI API specific errors
-        if (error.message.includes("API key")) {
-          errorMessage = "OpenAI API key is invalid or missing. Please check your OPENAI_API_KEY environment variable.";
-        } else if (error.message.includes("rate limit")) {
-          errorMessage = "OpenAI API rate limit exceeded. Please try again later.";
-        } else if (error.message.includes("model")) {
-          errorMessage = "OpenAI model error. Please check the model name.";
-        }
-      }
-      
+      logger.error("Error in agent loop iteration", {
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+      const errorMessage = normalizeAgentError(error);
       yield {
         type: "message",
         content: `Error: ${errorMessage}`,

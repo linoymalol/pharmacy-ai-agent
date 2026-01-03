@@ -1,10 +1,35 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
+import { randomUUID } from "crypto";
 import { runAgentLoop } from "../agent/agentLoop.js";
 import { toolDefinitions } from "../tools/definitions.js";
 import { toolHandlers } from "../tools/handlers.js";
-import { parseLocale } from "../config/locale.js";
-import type { AgentRequest, AgentResponseChunk } from "../types/shared.js";
+import type { AgentResponseChunk } from "../types/shared.js";
+import { createLogger, truncateLogValue } from "../utils/logger.js";
+import { validateAgentRequest } from "../utils/validation.js";
+
+const setSseHeaders = (res: Response): void => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+};
+
+const writeSseData = (res: Response, payload: unknown): void => {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  const resWithFlush = res as Response & { flush?: () => void };
+  if (typeof resWithFlush.flush === "function") {
+    resWithFlush.flush();
+  }
+};
+
+const endSseStream = (res: Response): void => {
+  try {
+    res.write("data: [DONE]\n\n");
+  } finally {
+    res.end();
+  }
+};
 
 export function createServer(port: number = 3000): Express {
   const app = express();
@@ -20,17 +45,21 @@ export function createServer(port: number = 3000): Express {
 
   // SSE endpoint for streaming agent responses
   app.post("/api/chat", async (req: Request, res: Response) => {
+    const requestId = randomUUID();
+    const logger = createLogger(requestId);
     try {
-      const { input, locale, history } = req.body as {
-        input?: string;
-        locale?: unknown;
-        history?: { role?: string; content?: string }[];
-      };
-
-      if (!input || typeof input !== "string") {
-        res.status(400).json({ error: "Invalid input: 'input' is required and must be a string" });
+      const validation = validateAgentRequest(req.body);
+      if (!validation.ok) {
+        res.status(400).json({ error: validation.error });
         return;
       }
+      const { input } = validation.value;
+      logger.info("Request start", {
+        path: req.path,
+        method: req.method,
+        inputPreview: truncateLogValue(input),
+        inputLength: input.length,
+      });
 
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
@@ -39,72 +68,53 @@ export function createServer(port: number = 3000): Express {
       }
 
       // Set up SSE headers
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
-
-      const sanitizedHistory = Array.isArray(history)
-        ? history
-            .filter((message) => message && typeof message === "object")
-            .filter((message) => message.role === "user" || message.role === "assistant")
-            .map((message) => ({
-              role: message.role as "user" | "assistant",
-              content: typeof message.content === "string" ? message.content : "",
-            }))
-            .filter((message) => message.content.length > 0)
-        : undefined;
-
-      const request: AgentRequest = {
-        input,
-        locale: parseLocale(locale),
-        history: sanitizedHistory,
-      };
-
+      setSseHeaders(res);
       try {
-        for await (const chunk of runAgentLoop(request, {
+        for await (const chunk of runAgentLoop(validation.value, {
           tools: toolDefinitions,
           handlers: toolHandlers,
           apiKey,
+          logger,
         })) {
           // Format as SSE
-          const data = JSON.stringify(chunk);
-          res.write(`data: ${data}\n\n`);
-
-          // Flush the response to ensure immediate delivery (if available)
-          const resWithFlush = res as Response & { flush?: () => void };
-          if (typeof resWithFlush.flush === "function") {
-            resWithFlush.flush();
-          }
+          writeSseData(res, chunk);
         }
 
         // Send end marker
-        res.write("data: [DONE]\n\n");
-        res.end();
+        endSseStream(res);
       } catch (error) {
-        console.error("Error in agent loop:", error);
+        logger.error("Error in agent loop", { message: error instanceof Error ? error.message : "Unknown error" });
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
         const errorChunk: AgentResponseChunk = {
           type: "message",
           content: `Error: ${errorMessage}`,
         };
         try {
-          res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-          res.write("data: [DONE]\n\n");
-          res.end();
+          writeSseData(res, errorChunk);
+          endSseStream(res);
         } catch (writeError) {
-          console.error("Error writing error response:", writeError);
+          logger.error("Error writing error response", {
+            message: writeError instanceof Error ? writeError.message : "Unknown error",
+          });
           if (!res.headersSent) {
             res.status(500).json({ error: errorMessage });
           }
         }
       }
     } catch (error) {
-      console.error("Error in /api/chat endpoint:", error);
+      logger.error("Error in /api/chat endpoint", { message: error instanceof Error ? error.message : "Unknown error" });
       if (!res.headersSent) {
-        res.status(500).json({ 
-          error: error instanceof Error ? error.message : "Unknown error occurred" 
+        res.status(500).json({
+          error: error instanceof Error ? error.message : "Unknown error occurred",
         });
+      } else {
+        try {
+          endSseStream(res);
+        } catch (finalizeError) {
+          logger.error("Failed to finalize SSE stream", {
+            message: finalizeError instanceof Error ? finalizeError.message : "Unknown error",
+          });
+        }
       }
     }
   });
