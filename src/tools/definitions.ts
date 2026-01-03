@@ -24,7 +24,7 @@ export type ToolHandlerMap = Record<string, ToolHandler>;
 export const toolDefinitions: ToolDefinition[] = [
   {
     name: "get_medication_by_name",
-    description: "Retrieve detailed information about a medication by its name. Use this to get information about active ingredients, dosage, usage instructions, and prescription requirements.",
+    description: "Retrieve detailed information about a medication by its name. Use this to get information about active ingredients, usage instructions, and prescription requirements.",
     parameters: {
       type: "object",
       properties: {

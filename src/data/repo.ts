@@ -20,7 +20,7 @@ export function getMedicationByName(name: string): MedicationRecord | null {
   const normalizedName = name.toLowerCase().trim();
   const row = db
     .prepare<[string], MedicationRow>(
-      "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE LOWER(name) = ?"
+      "SELECT id, name, activeIngredient, requiresPrescription, stock, usageInstructions FROM medications WHERE LOWER(name) = ?"
     )
     .get(normalizedName);
   return mapMedication(row ?? null);
@@ -29,7 +29,7 @@ export function getMedicationByName(name: string): MedicationRecord | null {
 export function getMedicationById(id: string): MedicationRecord | null {
   const row = db
     .prepare<[string], MedicationRow>(
-      "SELECT id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions FROM medications WHERE id = ?"
+      "SELECT id, name, activeIngredient, requiresPrescription, stock, usageInstructions FROM medications WHERE id = ?"
     )
     .get(id);
   return mapMedication(row ?? null);

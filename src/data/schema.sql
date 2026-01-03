@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS medications (
   activeIngredient TEXT NOT NULL,
   requiresPrescription INTEGER NOT NULL,
   stock INTEGER NOT NULL,
-  dosage TEXT,
   usageInstructions TEXT
 );
 

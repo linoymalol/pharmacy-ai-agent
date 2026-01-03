@@ -9,7 +9,6 @@ export type MedicationRecord = {
   activeIngredient: string;
   requiresPrescription: boolean;
   stock: number;
-  dosage?: string;
   usageInstructions?: string;
 };
 

@@ -21,9 +21,8 @@ const medications: MedicationRecord[] = [
     activeIngredient: "Acetylsalicylic acid",
     requiresPrescription: false,
     stock: 150,
-    dosage: "100mg, 325mg tablets",
     usageInstructions:
-      "Take with food or water. Do not exceed recommended dosage.",
+      "Take with food or water.",
   },
   {
     id: "med2",
@@ -31,7 +30,6 @@ const medications: MedicationRecord[] = [
     activeIngredient: "Amoxicillin trihydrate",
     requiresPrescription: true,
     stock: 45,
-    dosage: "250mg, 500mg capsules",
     usageInstructions:
       "Take as directed by your doctor, typically 2-3 times daily with or without food.",
   },
@@ -41,7 +39,6 @@ const medications: MedicationRecord[] = [
     activeIngredient: "Ibuprofen",
     requiresPrescription: false,
     stock: 200,
-    dosage: "200mg, 400mg, 600mg tablets",
     usageInstructions:
       "Take with food or milk to reduce stomach upset. Do not exceed 3200mg per day.",
   },
@@ -51,7 +48,6 @@ const medications: MedicationRecord[] = [
     activeIngredient: "Atorvastatin calcium",
     requiresPrescription: true,
     stock: 30,
-    dosage: "10mg, 20mg, 40mg, 80mg tablets",
     usageInstructions:
       "Take once daily, with or without food, as prescribed by your doctor.",
   },
@@ -61,7 +57,6 @@ const medications: MedicationRecord[] = [
     activeIngredient: "Metformin hydrochloride",
     requiresPrescription: true,
     stock: 25,
-    dosage: "500mg, 850mg, 1000mg tablets",
     usageInstructions:
       "Take with meals to reduce stomach upset. Follow your doctor's instructions carefully.",
   },
@@ -113,7 +108,7 @@ export function seedDatabase(db: DatabaseType): void {
     "INSERT OR IGNORE INTO users (id, name) VALUES (@id, @name)"
   );
   const insertMedication = db.prepare(
-    "INSERT OR IGNORE INTO medications (id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions) VALUES (@id, @name, @activeIngredient, @requiresPrescription, @stock, @dosage, @usageInstructions)"
+    "INSERT OR IGNORE INTO medications (id, name, activeIngredient, requiresPrescription, stock, usageInstructions) VALUES (@id, @name, @activeIngredient, @requiresPrescription, @stock, @usageInstructions)"
   );
   const insertPrescription = db.prepare(
     "INSERT OR IGNORE INTO prescriptions (id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName) VALUES (@id, @userId, @medicationId, @prescribedDate, @quantity, @refillsRemaining, @doctorName)"
