@@ -1,0 +1,126 @@
+import type { Database as DatabaseType } from "better-sqlite3";
+import type { UserRecord, MedicationRecord, PrescriptionRecord } from "./types.js";
+
+const users: UserRecord[] = [
+  { id: "user1", name: "David Cohen" },
+  { id: "user2", name: "Sarah Levy"},
+  { id: "user3", name: "Michael Ben-David" },
+  { id: "user4", name: "Rachel Mizrahi" },
+  { id: "user5", name: "John Smith" },
+  { id: "user6", name: "Emily Johnson"},
+  { id: "user7", name: "Daniel Brown" },
+  { id: "user8", name: "Lisa Anderson" },
+  { id: "user9", name: "Tom Wilson" },
+  { id: "user10", name: "Anna Martinez" },
+];
+
+const medications: MedicationRecord[] = [
+  {
+    id: "med1",
+    name: "Aspirin",
+    activeIngredient: "Acetylsalicylic acid",
+    requiresPrescription: false,
+    stock: 150,
+    usageInstructions:
+      "Take with food or water.",
+  },
+  {
+    id: "med2",
+    name: "Amoxicillin",
+    activeIngredient: "Amoxicillin trihydrate",
+    requiresPrescription: true,
+    stock: 45,
+    usageInstructions:
+      "Take as directed by your doctor, typically 2-3 times daily with or without food.",
+  },
+  {
+    id: "med3",
+    name: "Ibuprofen",
+    activeIngredient: "Ibuprofen",
+    requiresPrescription: false,
+    stock: 200,
+    usageInstructions:
+      "Take with food or milk to reduce stomach upset. Do not exceed 3200mg per day.",
+  },
+  {
+    id: "med4",
+    name: "Atorvastatin",
+    activeIngredient: "Atorvastatin calcium",
+    requiresPrescription: true,
+    stock: 30,
+    usageInstructions:
+      "Take once daily, with or without food, as prescribed by your doctor.",
+  },
+  {
+    id: "med5",
+    name: "Metformin",
+    activeIngredient: "Metformin hydrochloride",
+    requiresPrescription: true,
+    stock: 25,
+    usageInstructions:
+      "Take with meals to reduce stomach upset. Follow your doctor's instructions carefully.",
+  },
+];
+
+const prescriptions: PrescriptionRecord[] = [
+  {
+    id: "presc1",
+    userId: "user1",
+    medicationId: "med4",
+    prescribedDate: "2024-01-15",
+    quantity: 30,
+    refillsRemaining: 2,
+    doctorName: "Dr. Avraham Goldstein",
+  },
+  {
+    id: "presc2",
+    userId: "user2",
+    medicationId: "med5",
+    prescribedDate: "2024-01-20",
+    quantity: 60,
+    refillsRemaining: 1,
+    doctorName: "Dr. Miriam Cohen",
+  },
+  {
+    id: "presc3",
+    userId: "user5",
+    medicationId: "med2",
+    prescribedDate: "2024-02-01",
+    quantity: 21,
+    refillsRemaining: 0,
+    doctorName: "Dr. Robert Miller",
+  },
+];
+
+type MedicationSeedRow = Omit<MedicationRecord, "requiresPrescription"> & {
+  requiresPrescription: number;
+};
+
+function toMedicationSeedRow(medication: MedicationRecord): MedicationSeedRow {
+  return {
+    ...medication,
+    requiresPrescription: medication.requiresPrescription ? 1 : 0,
+  };
+}
+
+export function seedDatabase(db: DatabaseType): void {
+  const insertUser = db.prepare(
+    "INSERT OR IGNORE INTO users (id, name) VALUES (@id, @name)"
+  );
+  const insertMedication = db.prepare(
+    "INSERT OR IGNORE INTO medications (id, name, activeIngredient, requiresPrescription, stock, usageInstructions) VALUES (@id, @name, @activeIngredient, @requiresPrescription, @stock, @usageInstructions)"
+  );
+  const insertPrescription = db.prepare(
+    "INSERT OR IGNORE INTO prescriptions (id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName) VALUES (@id, @userId, @medicationId, @prescribedDate, @quantity, @refillsRemaining, @doctorName)"
+  );
+
+  const seedTransaction = db.transaction(() => {
+    users.forEach((user) => insertUser.run(user));
+    medications
+      .map(toMedicationSeedRow)
+      .forEach((medication) => insertMedication.run(medication));
+    prescriptions.forEach((prescription) => insertPrescription.run(prescription));
+  });
+
+  seedTransaction();
+}
