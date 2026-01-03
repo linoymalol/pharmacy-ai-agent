@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS medications (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  aliases TEXT,
   activeIngredient TEXT NOT NULL,
   requiresPrescription INTEGER NOT NULL,
   stock INTEGER NOT NULL,

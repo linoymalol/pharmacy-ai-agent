@@ -6,6 +6,7 @@ export type UserRecord = {
 export type MedicationRecord = {
   id: string;
   name: string;
+  aliases?: string[];
   activeIngredient: string;
   requiresPrescription: boolean;
   stock: number;

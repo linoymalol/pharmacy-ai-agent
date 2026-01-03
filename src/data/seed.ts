@@ -18,6 +18,7 @@ const medications: MedicationRecord[] = [
   {
     id: "med1",
     name: "Aspirin",
+    aliases: ["אספירין"],
     activeIngredient: "Acetylsalicylic acid",
     requiresPrescription: false,
     stock: 150,
@@ -99,12 +100,14 @@ const prescriptions: PrescriptionRecord[] = [
 
 type MedicationSeedRow = Omit<MedicationRecord, "requiresPrescription"> & {
   requiresPrescription: number;
+  aliases: string | null;
 };
 
 function toMedicationSeedRow(medication: MedicationRecord): MedicationSeedRow {
   return {
     ...medication,
     requiresPrescription: medication.requiresPrescription ? 1 : 0,
+    aliases: medication.aliases ? JSON.stringify(medication.aliases) : null,
   };
 }
 
@@ -113,7 +116,7 @@ export function seedDatabase(db: DatabaseType): void {
     "INSERT OR IGNORE INTO users (id, name) VALUES (@id, @name)"
   );
   const insertMedication = db.prepare(
-    "INSERT OR IGNORE INTO medications (id, name, activeIngredient, requiresPrescription, stock, dosage, usageInstructions) VALUES (@id, @name, @activeIngredient, @requiresPrescription, @stock, @dosage, @usageInstructions)"
+    "INSERT OR IGNORE INTO medications (id, name, aliases, activeIngredient, requiresPrescription, stock, dosage, usageInstructions) VALUES (@id, @name, @aliases, @activeIngredient, @requiresPrescription, @stock, @dosage, @usageInstructions)"
   );
   const insertPrescription = db.prepare(
     "INSERT OR IGNORE INTO prescriptions (id, userId, medicationId, prescribedDate, quantity, refillsRemaining, doctorName) VALUES (@id, @userId, @medicationId, @prescribedDate, @quantity, @refillsRemaining, @doctorName)"

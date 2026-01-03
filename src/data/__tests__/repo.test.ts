@@ -22,6 +22,13 @@ describe("data repo", () => {
     expect(medication?.name).toBe("Aspirin");
   });
 
+  it("getMedicationByName matches aliases", () => {
+    const medication = getMedicationByName("אספירין");
+
+    expect(medication).not.toBeNull();
+    expect(medication?.name).toBe("Aspirin");
+  });
+
   it("getUserPrescriptions returns only matching records", () => {
     const prescriptions = getUserPrescriptions("user1");
 
