@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { seedDatabase } from "./seed.js";
@@ -18,6 +18,10 @@ function initializeDatabase(): DatabaseType {
     mkdirSync(dataDir, { recursive: true });
   }
 
+  if (existsSync(dbPath)) {
+    rmSync(dbPath);
+  }
+  
   const db = new Database(dbPath);
   db.pragma("foreign_keys = ON");
 
