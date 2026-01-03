@@ -10,13 +10,8 @@ const __dirname = dirname(__filename);
 // Load environment variables from .env file in the project root
 // Go up from dist/ to project root
 const envPath = join(__dirname, "..", ".env");
-const result = dotenv.config({ path: envPath });
+dotenv.config({ path: envPath });
 
-if (result.error) {
-  console.error("Error loading .env file:", result.error);
-} else {
-  console.log("✓ .env file loaded from:", envPath);
-}
 
 // Debug: Log if API key is loaded (without exposing the key)
 if (process.env.OPENAI_API_KEY) {
