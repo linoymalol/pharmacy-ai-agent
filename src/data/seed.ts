@@ -98,9 +98,9 @@ const prescriptions: PrescriptionRecord[] = [
   },
 ];
 
-type MedicationSeedRow = Omit<MedicationRecord, "requiresPrescription"> & {
+type MedicationSeedRow = Omit<MedicationRecord, "requiresPrescription" | "aliases"> & {
   requiresPrescription: number;
-  aliases: string | null;
+  aliases?: string | null;
 };
 
 function toMedicationSeedRow(medication: MedicationRecord): MedicationSeedRow {
